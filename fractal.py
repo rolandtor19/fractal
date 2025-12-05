@@ -209,4 +209,68 @@ if run_btn:
         # Fantasmas
         for s in series_graficar:
             color = 'steelblue' if s['source'] == lib1_ticker else 'chocolate'
-            ax.plot(x_total, s['serie'], label=s['label'], color=color
+            ax.plot(x_total, s['serie'], label=s['label'], color=color, alpha=0.4, linewidth=1.2)
+            
+        # Maestra
+        y_master = np.insert(linea_maestra, 0, ultimo_valor_actual)
+        x_master = np.insert(x_futuro, 0, 0)
+        ax.plot(x_master, y_master, label="PROYECCIÓN HÍBRIDA", color='#00ff00', linewidth=3.5, zorder=10)
+        
+        # Actual
+        ax.plot(x_pasado, patron_actual_norm, label=f"ACTUAL ({ticker_obj})", color='black', linewidth=2.5, zorder=11)
+        
+        # Ejes
+        ax.set_xlim(x_total[0], x_total[-1])
+        locator = ticker.MaxNLocator(nbins=25, integer=True)
+        ax.xaxis.set_major_locator(locator)
+        ax.minorticks_on()
+        ax.grid(True, which='major', alpha=0.3)
+        ax.set_xlabel(f"Velas de {tf_obj} (Pasado <--- 0 ---> Futuro)", fontsize=10, color='gray')
+        
+        # Eje Superior Tiempo
+        ax_top = ax.twiny()
+        ax_top.set_xlim(ax.get_xlim())
+        ax_top.xaxis.set_major_locator(locator)
+        
+        def obtener_delta(tf_str):
+            num = int(re.search(r'\d+', tf_str).group()) if re.search(r'\d+', tf_str) else 1
+            unit = tf_str.lower()
+            if 'wk' in unit: return pd.Timedelta(weeks=num)
+            if 'mo' in unit: return pd.Timedelta(days=30*num)
+            if 'm' in unit and 'o' not in unit: return pd.Timedelta(minutes=num)
+            if 'h' in unit: return pd.Timedelta(hours=num)
+            return pd.Timedelta(days=1)
+
+        delta = obtener_delta(tf_obj)
+        ref_date = fechas_obj[-1]
+        es_intradia_plot = "m" in tf_obj or "h" in tf_obj
+
+        def date_fmt(x, pos):
+            dt = ref_date + (delta * x)
+            if es_intradia_plot: return dt.strftime("%d-%b %Hh")
+            else: return dt.strftime("%d-%b")
+
+        ax_top.xaxis.set_major_formatter(ticker.FuncFormatter(date_fmt))
+        ax_top.tick_params(axis='x', rotation=45, labelsize=8)
+        
+        # Eje Precio
+        ax2 = ax.twinx()
+        min_p, max_p = np.min(patron_actual), np.max(patron_actual)
+        rng = max_p - min_p
+        y1, y2 = ax.get_ylim()
+        ax2.set_ylim(y1 * rng + min_p, y2 * rng + min_p)
+        ax2.yaxis.set_major_formatter(ticker.StrMethodFormatter('${x:,.0f}'))
+        ax2.set_ylabel(f"Precio {ticker_obj}", fontweight='bold')
+        
+        curr_price = patron_actual[-1]
+        ax2.axhline(curr_price, color='#444444', ls='--', lw=1.5, alpha=0.8)
+        ax2.text(x_pasado[0], curr_price, f" Precio Actual: ${curr_price:,.2f} ", 
+                 color='black', fontweight='bold', va='bottom', bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+        
+        plt.axvline(0, color='red', ls=':', label="Ahora")
+        plt.title(f"Fractalidad Cruzada: {ticker_obj} ({tf_obj}) vs [{lib1_ticker} & {lib2_ticker}]", pad=20, fontsize=14)
+        ax.legend(bbox_to_anchor=(1.08, 1), loc='upper left', fontsize=8)
+        
+        st.pyplot(fig)
+        
+        st.success("Análisis finalizado exitosamente.")
