@@ -8,7 +8,7 @@ import matplotlib.cm as cm
 from datetime import datetime, timedelta
 import re
 
-# --- CONFIGURACIÓN INICIAL DE LA PÁGINA ---
+# --- CONFIGURACIÓN INICIAL ---
 st.set_page_config(
     page_title="Fractal Hunter Pro",
     page_icon="🔮",
@@ -24,20 +24,19 @@ para proyectar movimientos futuros. Incluye **Máquina del Tiempo** para validar
 
 # --- LISTAS PREDEFINIDAS ---
 COMMON_TICKERS = [
-    "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", # Cripto
-    "QQQ", "SPY", "DIA", "IWM",                 # Índices
-    "NVDA", "TSLA", "AAPL", "MSFT", "MSTR",     # Acciones Volátiles
-    "GLD", "SLV", "USO", "TLT",                 # Commodities/Bonos
-    "EURUSD=X", "JPY=X"                         # Forex
+    "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", 
+    "QQQ", "SPY", "DIA", "IWM",                 
+    "NVDA", "TSLA", "AAPL", "MSFT", "MSTR",     
+    "GLD", "SLV", "USO", "TLT",                 
+    "EURUSD=X", "JPY=X"                         
 ]
 
 COMMON_TFS = ["15m", "30m", "1h", "4h", "1d", "1wk", "1mo"]
 
-# --- BARRA LATERAL: CONTROLES ---
+# --- BARRA LATERAL ---
 with st.sidebar:
     st.header("1. Configuración del Objetivo")
     
-    # Selector de Ticker con opción manual
     mode_ticker = st.radio("Selección de Activo:", ["Lista Común", "Manual"], horizontal=True)
     if mode_ticker == "Lista Común":
         ticker_obj = st.selectbox("Activo Objetivo", COMMON_TICKERS, index=0)
@@ -48,37 +47,33 @@ with st.sidebar:
     with c1:
         tf_obj = st.selectbox("Timeframe", COMMON_TFS, index=4) # Default 1d
     with c2:
-        columna_analisis = st.selectbox("Precio:", ["Close", "Low", "High"], index=1) # Default Low (Soportes)
+        columna_analisis = st.selectbox("Precio:", ["Close", "Low", "High"], index=1) 
 
     st.divider()
     
     st.header("2. Máquina del Tiempo (Backtest)")
     enable_backtest = st.checkbox("Activar Backtesting", value=False)
     
-    fecha_corte = None
+    fecha_corte = datetime.today()
     if enable_backtest:
         fecha_corte = st.date_input(
-            "Analizar como si hoy fuera:",
+            "Fecha de Corte (El algoritmo ignora el futuro):",
             value=datetime.today() - timedelta(days=60),
             max_value=datetime.today()
         )
-        st.caption("ℹ️ El algoritmo 'olvidará' todo lo que pasó después de esta fecha.")
     
     st.divider()
     
     st.header("3. Librerías de Búsqueda")
-    
-    # Librería 1
     l1_c1, l1_c2 = st.columns([2, 1])
     with l1_c1:
-        lib1_ticker = st.selectbox("Librería 1", COMMON_TICKERS, index=4) # QQQ default
+        lib1_ticker = st.selectbox("Librería 1", COMMON_TICKERS, index=4) 
     with l1_c2:
         lib1_tf = st.selectbox("TF L1", ["1d", "1wk"], index=0)
         
-    # Librería 2
     l2_c1, l2_c2 = st.columns([2, 1])
     with l2_c1:
-        lib2_ticker = st.selectbox("Librería 2", COMMON_TICKERS, index=13) # GLD default
+        lib2_ticker = st.selectbox("Librería 2", COMMON_TICKERS, index=13) 
     with l2_c2:
         lib2_tf = st.selectbox("TF L2", ["1d", "1wk"], index=0)
 
@@ -91,22 +86,20 @@ with st.sidebar:
     
     run_btn = st.button("🚀 EJECUTAR ANÁLISIS", type="primary", use_container_width=True)
 
-# --- FUNCIONES DE LÓGICA (CACHÉ) ---
+# --- FUNCIONES DE LÓGICA ---
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def descargar_y_procesar(ticker, tf, col_target, fecha_limite_str=None):
-    """Descarga datos y gestiona el recorte de tiempo para backtesting."""
-    
-    # 1. Definir periodo de descarga según timeframe
+    # Reglas de límite de Yahoo
     tf_lower = tf.lower()
-    es_intradia = "m" in tf_lower or "h" in tf_lower
-    periodo_yahoo = "730d" if es_intradia else "max"
+    if tf_lower == "1m": periodo = "7d"
+    elif any(x in tf_lower for x in ["2m","5m","15m","30m","90m"]): periodo = "59d"
+    elif any(x in tf_lower for x in ["60m","1h"]): periodo = "730d"
+    else: periodo = "max"
     
-    # 2. Descarga
     try:
-        data = yf.download(ticker, period=periodo_yahoo, interval=tf, progress=False, auto_adjust=False)
+        data = yf.download(ticker, period=periodo, interval=tf, progress=False, auto_adjust=False)
         
-        # Selección de columna
         if isinstance(data.columns, pd.MultiIndex):
             data = data[col_target]
         else:
@@ -117,22 +110,21 @@ def descargar_y_procesar(ticker, tf, col_target, fecha_limite_str=None):
         if len(data) < 50:
             return None, None, None, None, f"Pocos datos para {ticker} ({len(data)} velas)."
 
-        # Limpieza de Zona Horaria
         if data.index.tz is not None:
             data.index = data.index.tz_localize(None)
             
-        # 3. Lógica de Recorte (Backtest)
+        # Lógica de Recorte
         vals_futuro = []
         fechas_futuro = []
         
         if fecha_limite_str:
             fecha_dt = pd.to_datetime(fecha_limite_str)
             
-            # Cortar Datos
+            # Cortar Datos (Pasado)
             mask_pasado = data.index <= fecha_dt
             data_pasado = data[mask_pasado]
             
-            # Guardar "El Futuro Real" para validación
+            # Guardar Futuro Real (Validación)
             mask_futuro = data.index > fecha_dt
             data_futuro = data[mask_futuro]
             
@@ -146,7 +138,6 @@ def descargar_y_procesar(ticker, tf, col_target, fecha_limite_str=None):
             return vals_pasado, fechas_pasado, vals_futuro, fechas_futuro, None
             
         else:
-            # Modo Live (Sin recorte)
             return data.values.flatten(), data.index, [], [], None
 
     except Exception as e:
@@ -167,7 +158,6 @@ def escanear_libreria(nombre_lib, precios_lib, fechas_lib, patron_target, n_proy
     tope = len(precios_lib) - len_patron - n_proyeccion
     if tope <= 0: return []
 
-    # Bucle de búsqueda (Vectorizar esto sería el siguiente nivel de optimización)
     for i in range(tope):
         candidato = precios_lib[i : i + len_patron]
         candidato_norm = normalizar(candidato)
@@ -183,45 +173,39 @@ def escanear_libreria(nombre_lib, precios_lib, fechas_lib, patron_target, n_proy
         })
     return hallazgos
 
-# --- LÓGICA DE EJECUCIÓN PRINCIPAL ---
+# --- EJECUCIÓN PRINCIPAL ---
 
 if run_btn:
-    # Contenedor de estado
     status_text = st.empty()
     bar = st.progress(0)
     
     try:
-        # A. DESCARGA DE DATOS
-        status_text.text("📡 Descargando datos de mercado...")
-        
-        # Fecha límite (si aplica)
+        # A. DESCARGA
+        status_text.text("📡 Descargando datos...")
         fecha_str = fecha_corte.strftime('%Y-%m-%d') if enable_backtest else None
         
-        # 1. Objetivo
+        # Objetivo
         obj_p, obj_f, real_p, real_f, err = descargar_y_procesar(ticker_obj, tf_obj, columna_analisis, fecha_str)
         if err:
             st.error(f"Error Objetivo: {err}")
             st.stop()
             
         if len(obj_p) < ventana:
-            st.error(f"Historial insuficiente en {ticker_obj} antes de la fecha de corte. Necesitas {ventana} velas.")
+            st.error(f"Historial insuficiente en {ticker_obj}. Necesitas {ventana} velas antes de la fecha de corte.")
             st.stop()
             
         patron_actual = obj_p[-ventana:]
         bar.progress(20)
         
-        # 2. Librerías (Usamos fecha de corte también para no tener "look-ahead bias" estricto, 
-        # aunque a veces es útil buscar en el futuro de otro activo si es cross-market. 
-        # Por rigor, cortaremos también las librerías a la fecha de corte).
-        
+        # Librerías
         lib1_p, lib1_f, _, _, err1 = descargar_y_procesar(lib1_ticker, lib1_tf, columna_analisis, fecha_str)
         lib2_p, lib2_f, _, _, err2 = descargar_y_procesar(lib2_ticker, lib2_tf, columna_analisis, fecha_str)
         
-        bar.progress(40)
+        if err1: st.warning(f"Librería 1: {err1}")
+        if err2: st.warning(f"Librería 2: {err2}")
         
-        # B. CÁLCULO MATEMÁTICO
-        status_text.text("🧮 Calculando distancias euclidianas y fractales...")
-        
+        # B. CÁLCULO
+        status_text.text("🧮 Analizando fractales...")
         matches = []
         if lib1_p is not None: matches += escanear_libreria(lib1_ticker, lib1_p, lib1_f, patron_actual, proyeccion)
         if lib2_p is not None: matches += escanear_libreria(lib2_ticker, lib2_p, lib2_f, patron_actual, proyeccion)
@@ -229,10 +213,9 @@ if run_btn:
         bar.progress(70)
         
         if not matches:
-            st.warning("No se encontraron patrones similares. Intenta reducir la ventana o cambiar de activo.")
+            st.warning("No se encontraron patrones. Intenta reducir la ventana.")
             st.stop()
             
-        # Ordenar y Filtrar
         matches.sort(key=lambda x: x['score'])
         
         seleccionados = []
@@ -258,8 +241,8 @@ if run_btn:
             
         bar.progress(90)
         
-        # C. CONSTRUCCIÓN DE PROYECCIÓN
-        status_text.text("🎨 Generando visualización...")
+        # C. PROYECCIÓN
+        status_text.text("🎨 Dibujando gráfico...")
         
         suma_proyecciones = np.zeros(proyeccion)
         suma_pesos = 0
@@ -272,7 +255,6 @@ if run_btn:
             serie_comp = np.concatenate([match['datos_past'], match['datos_fut']])
             serie_norm = normalizar(serie_comp)
             
-            # Alineación Pivot
             punto_empalme = serie_norm[-(proyeccion+1)]
             offset = ultimo_valor_actual - punto_empalme
             serie_alineada = serie_norm + offset
@@ -291,10 +273,8 @@ if run_btn:
         bar.progress(100)
         status_text.empty()
         
-        # --- D. PLOT CON MATPLOTLIB ---
-        # Usamos el estilo oscuro de Streamlit por defecto, así que ajustamos colores para contraste
-        
-        fig, ax = plt.subplots(figsize=(16, 9))
+        # --- D. PLOT ---
+        fig, ax = plt.subplots(figsize=(16, 8))
         
         x_pasado = np.arange(-ventana + 1, 1)
         x_futuro = np.arange(1, proyeccion + 1)
@@ -310,30 +290,27 @@ if run_btn:
         x_master = np.insert(x_futuro, 0, 0)
         ax.plot(x_master, y_master, label="PROYECCIÓN HÍBRIDA", color='#00ff00', linewidth=3.5, zorder=10)
         
-        # 3. Actual (Historia Reciente)
+        # 3. Actual
         ax.plot(x_pasado, patron_actual_norm, label=f"ACTUAL ({ticker_obj})", color='black', linewidth=2.5, zorder=11)
         
-        # 4. REALIDAD (Solo si es Backtest)
+        # 4. REALIDAD (BACKTEST) - CORREGIDO COLOR
         if enable_backtest and len(real_p) > 0:
-            # Normalizar realidad con la escala del patrón original
             min_p = np.min(patron_actual)
             max_p = np.max(patron_actual)
             rng = max_p - min_p
-            
             realidad_norm = (real_p - min_p) / rng
             
-            # Recortar si la realidad es más larga que la proyección
             limit_len = min(len(realidad_norm), proyeccion)
             y_real = realidad_norm[:limit_len]
             x_real = np.arange(1, limit_len + 1)
             
-            # Insertar punto 0 para conectar
             y_real_con = np.insert(y_real, 0, ultimo_valor_actual)
             x_real_con = np.insert(x_real, 0, 0)
             
-            ax.plot(x_real_con, y_real_con, label="REALIDAD (VALIDACIÓN)", color='white', linewidth=2.5, linestyle='--', zorder=12)
+            # COLOR NEGRO PUNTEADO PARA QUE SE VEA SIEMPRE
+            ax.plot(x_real_con, y_real_con, label="REALIDAD (VALIDACIÓN)", color='black', linewidth=2.5, linestyle='--', zorder=12)
 
-        # === CONFIGURACIÓN DE EJES ===
+        # Configuración Ejes
         ax.set_xlim(x_total[0], x_total[-1])
         locator = ticker.MaxNLocator(nbins=25, integer=True)
         ax.xaxis.set_major_locator(locator)
@@ -341,14 +318,13 @@ if run_btn:
         ax.grid(True, which='major', alpha=0.3)
         ax.set_xlabel(f"Velas de {tf_obj} (Pasado <--- 0 ---> Futuro)", fontsize=10, color='gray')
         
-        # Eje Superior (Tiempo)
+        # Eje Superior
         ax_top = ax.twiny()
         ax_top.set_xlim(ax.get_xlim())
         ax_top.xaxis.set_major_locator(locator)
         
         def obtener_delta(tf_str):
-            num_match = re.search(r'\d+', tf_str)
-            num = int(num_match.group()) if num_match else 1
+            num = int(re.search(r'\d+', tf_str).group()) if re.search(r'\d+', tf_str) else 1
             unit = tf_str.lower()
             if 'wk' in unit: return pd.Timedelta(weeks=num)
             if 'mo' in unit: return pd.Timedelta(days=30*num)
@@ -357,7 +333,8 @@ if run_btn:
             return pd.Timedelta(days=1)
 
         delta = obtener_delta(tf_obj)
-        ref_date = obj_f[-1] # Última fecha cargada (sea hoy o fecha de corte)
+        # La fecha de referencia es la última del objeto cargado (sea hoy o fecha de corte)
+        ref_date = obj_f[-1] 
         es_intradia_plot = "m" in tf_obj or "h" in tf_obj
 
         def date_fmt(x, pos):
@@ -368,7 +345,7 @@ if run_btn:
         ax_top.xaxis.set_major_formatter(ticker.FuncFormatter(date_fmt))
         ax_top.tick_params(axis='x', rotation=45, labelsize=8)
         
-        # Eje Precio (Derecho)
+        # Eje Precio
         ax2 = ax.twinx()
         min_p, max_p = np.min(patron_actual), np.max(patron_actual)
         rng = max_p - min_p
@@ -377,37 +354,31 @@ if run_btn:
         ax2.yaxis.set_major_formatter(ticker.StrMethodFormatter('${x:,.0f}'))
         ax2.set_ylabel(f"Precio {ticker_obj}", fontweight='bold')
         
+        # ETIQUETA DINÁMICA
         curr_price = patron_actual[-1]
         ax2.axhline(curr_price, color='#444444', ls='--', lw=1.5, alpha=0.8)
-        ax2.text(x_pasado[0], curr_price, f" ${curr_price:,.2f} ", 
+        
+        if enable_backtest:
+            # Etiqueta para Backtest
+            label_precio = f" Corte: {fecha_str} | Precio: ${curr_price:,.2f} "
+        else:
+            # Etiqueta Normal
+            label_precio = f" Precio Actual: ${curr_price:,.2f} "
+            
+        ax2.text(x_pasado[0], curr_price, label_precio, 
                  color='black', fontweight='bold', va='bottom', bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
         
-        # Títulos
-        label_fecha = "Fecha Corte" if enable_backtest else "Ahora"
-        plt.axvline(0, color='red', ls=':', label=label_fecha)
+        label_v = "Fecha Corte" if enable_backtest else "Ahora"
+        plt.axvline(0, color='red', ls=':', label=label_v)
         
-        titulo = f"Fractalidad: {ticker_obj} ({tf_obj}) vs [{lib1_ticker} & {lib2_ticker}]"
-        if enable_backtest:
-            titulo += f" | BACKTEST: {fecha_str}"
+        titulo = f"Fractalidad Cruzada: {ticker_obj} ({tf_obj}) vs [{lib1_ticker} & {lib2_ticker}]"
+        if enable_backtest: titulo += f" | BACKTEST: {fecha_str}"
             
         plt.title(titulo, pad=25, fontsize=14)
         ax.legend(bbox_to_anchor=(1.08, 1), loc='upper left', fontsize=8)
         
-        # Renderizar en Streamlit
         st.pyplot(fig)
-        
-        # --- TABLA DE DATOS (Opcional) ---
-        with st.expander("📊 Ver Datos de Proyección"):
-            # Generar fechas futuras
-            fechas_proy = [ref_date + (delta * i) for i in range(1, proyeccion + 1)]
-            # Des-normalizar precios
-            precios_proy = (linea_maestra * rng) + min_p
-            
-            df_proy = pd.DataFrame({
-                "Fecha": fechas_proy,
-                "Precio Estimado": precios_proy
-            })
-            st.dataframe(df_proy)
+        st.success("Cálculo finalizado.")
 
     except Exception as e:
-        st.error(f"Ocurrió un error inesperado: {e}")
+        st.error(f"Error inesperado: {e}")
