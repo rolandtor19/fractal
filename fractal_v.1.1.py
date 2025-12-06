@@ -83,7 +83,7 @@ with st.sidebar:
     if enable_backtest:
         fecha_corte = st.date_input("Fecha Corte:", value=datetime.today()-timedelta(days=60), max_value=datetime.today())
     
-    ventana = st.slider("Memoria ()", 30, 365, 120)
+     = st.slider("Memoria ()", 30, 365, 120)
     proyeccion = st.slider("Proyección (Futuro)", 5, 90, 30)
     resultados = st.slider("Top Coincidencias", 1, 15, 5)
     
@@ -353,7 +353,7 @@ if run_btn:
         plt.axvline(0, color='red', ls=':', label=label_v)
         
         titulo_libs = ", ".join(libs_seleccionadas[:2]) + ("..." if len(libs_seleccionadas)>2 else "")
-        titulo = f"Fractalidad: {ticker_obj} ({tf_obj}) vs [{titulo_libs}]"
+        titulo = f"Fractalidad: {ticker_obj} ({tf_obj}) vs [{titulo_libs}] | Memoria: {ventana} | Proyección: {proyeccion}"
         if enable_backtest: titulo += f" | BACKTEST: {fecha_str}"
         plt.title(titulo, pad=35, fontsize=14)
         
@@ -370,6 +370,7 @@ if run_btn:
 
     except Exception as e:
         st.error(f"Ocurrió un error inesperado: {e}")
+
 
 
 
