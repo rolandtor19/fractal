@@ -83,7 +83,7 @@ with st.sidebar:
     if enable_backtest:
         fecha_corte = st.date_input("Fecha Corte:", value=datetime.today()-timedelta(days=60), max_value=datetime.today())
     
-    ventana = st.slider("Memoria (Velas)", 30, 365, 120)
+    ventana = st.slider("Memoria ()", 30, 365, 120)
     proyeccion = st.slider("Proyección (Futuro)", 5, 90, 30)
     resultados = st.slider("Top Coincidencias", 1, 15, 5)
     
@@ -304,7 +304,7 @@ if run_btn:
         ax.xaxis.set_major_locator(locator)
         ax.minorticks_on()
         ax.grid(True, which='major', alpha=0.3)
-        ax.set_xlabel(f"Velas de {tf_obj}", fontsize=10, color='gray')
+        ax.set_xlabel(f"Velas de {TF_OBJETIVO} (Pasado <--- 0 ---> Futuro)", fontsize=10, color='gray')
         
         # EJE TIEMPO SUPERIOR
         ax_top = ax.twiny()
@@ -370,5 +370,6 @@ if run_btn:
 
     except Exception as e:
         st.error(f"Ocurrió un error inesperado: {e}")
+
 
 
