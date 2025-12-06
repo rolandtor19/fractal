@@ -85,7 +85,7 @@ with st.sidebar:
     
     ventana = st.slider("Memoria (Velas)", 30, 365, 120)
     proyeccion = st.slider("Proyección (Futuro)", 5, 90, 30)
-    resultados = st.slider("Top Coincidencias", 1, 10, 5)
+    resultados = st.slider("Top Coincidencias", 1, 15, 5)
     
     run_btn = st.button("🚀 EJECUTAR ESCÁNER", type="primary", use_container_width=True)
 
@@ -370,3 +370,4 @@ if run_btn:
 
     except Exception as e:
         st.error(f"Ocurrió un error inesperado: {e}")
+
