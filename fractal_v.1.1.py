@@ -83,7 +83,7 @@ with st.sidebar:
     if enable_backtest:
         fecha_corte = st.date_input("Fecha Corte:", value=datetime.today()-timedelta(days=60), max_value=datetime.today())
     
-     = st.slider("Memoria ()", 30, 365, 120)
+    ventana = st.slider("Memoria ()", 30, 365, 120)
     proyeccion = st.slider("Proyección (Futuro)", 5, 90, 30)
     resultados = st.slider("Top Coincidencias", 1, 15, 5)
     
@@ -370,6 +370,7 @@ if run_btn:
 
     except Exception as e:
         st.error(f"Ocurrió un error inesperado: {e}")
+
 
 
 
