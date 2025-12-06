@@ -67,17 +67,25 @@ with st.sidebar:
     )
     
     # Opción para agregar multiple manuales extra a la búsqueda
-with st.expander("➕ Agregar activos manuales extra"):
+# --- REEMPLAZO: AGREGAR MÚLTIPLES MANUALES ---
+    with st.expander("➕ Agregar activos manuales extra"):
         manual_input = st.text_area(
             "Escribe los tickers separados por coma (,):",
             placeholder="Ej: AMD, INTC, ^IXIC, XAUUSD=X"
         )
         
         if manual_input:
+            # 1. Separar por comas
+            # 2. Quitar espacios en blanco (strip)
+            # 3. Convertir a mayúsculas (upper) para evitar errores
+            # 4. Filtrar vacíos
             extras = [x.strip().upper() for x in manual_input.split(',') if x.strip()]
+            
+            # Agregar a la lista principal (evitando duplicados si ya estaban seleccionados)
             for extra in extras:
                 if extra not in libs_seleccionadas:
                     libs_seleccionadas.append(extra)
+            
             st.caption(f"✅ Se añadirán: {', '.join(extras)}")
 
     tf_libs = st.selectbox("Timeframe de Búsqueda", ["1d", "1wk"], index=0)
@@ -377,6 +385,7 @@ if run_btn:
 
     except Exception as e:
         st.error(f"Ocurrió un error inesperado: {e}")
+
 
 
 
