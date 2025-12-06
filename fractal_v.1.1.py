@@ -18,30 +18,41 @@ st.set_page_config(
 
 st.title("🔮 Radar de Fractales & Backtester (Cross-Market)")
 st.markdown("""
-**Herramienta de Ingeniería Financiera:** Busca patrones matemáticos idénticos en el pasado de diferentes mercados 
-para proyectar movimientos futuros. Incluye **Máquina del Tiempo** para validar estrategias.
+**Herramienta de Ingeniería Financiera:** Busca patrones matemáticos idénticos en el pasado para proyectar el futuro.
 """)
 
 # --- LISTAS PREDEFINIDAS ---
 COMMON_TICKERS = [
-    "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", 
-    "QQQ", "SPY", "DIA", "IWM",                 
-    "NVDA", "TSLA", "AAPL", "MSFT", "MSTR",     
-    "GLD", "SLV", "USO", "TLT",                 
-    "EURUSD=X", "JPY=X"                         
+    "BTC-USD", "ETH-USD", "SOL-USD", "BNB-USD", "DOGE-USD",
+    "QQQ", "SPY", "DIA", "IWM", "^VIX",
+    "NVDA", "TSLA", "AAPL", "MSFT", "MSTR", "COIN", "AMD",
+    "GLD", "SLV", "USO", "TLT",
+    "EURUSD=X", "JPY=X", "GBPUSD=X"
 ]
 
 COMMON_TFS = ["15m", "30m", "1h", "4h", "1d", "1wk", "1mo"]
 
+# --- HELPER PARA SELECCIÓN DE ACTIVOS ---
+def render_asset_selector(label, key_prefix, default_val):
+    """Crea un selector híbrido (Lista o Manual)"""
+    col_mode, col_input = st.columns([1, 2])
+    with col_mode:
+        mode = st.radio("Modo", ["Lista", "Manual"], horizontal=True, key=f"{key_prefix}_mode", label_visibility="collapsed")
+    
+    with col_input:
+        if mode == "Lista":
+            # Intentamos encontrar el default en la lista, si no, usamos el primero
+            idx = COMMON_TICKERS.index(default_val) if default_val in COMMON_TICKERS else 0
+            val = st.selectbox(label, COMMON_TICKERS, index=idx, key=f"{key_prefix}_list")
+        else:
+            val = st.text_input(label, value=default_val, key=f"{key_prefix}_text")
+    return val
+
 # --- BARRA LATERAL ---
 with st.sidebar:
     st.header("1. Configuración del Objetivo")
-    
-    mode_ticker = st.radio("Selección de Activo:", ["Lista Común", "Manual"], horizontal=True)
-    if mode_ticker == "Lista Común":
-        ticker_obj = st.selectbox("Activo Objetivo", COMMON_TICKERS, index=0)
-    else:
-        ticker_obj = st.text_input("Escribe el Ticker (Yahoo)", value="BTC-USD")
+    # Selector Híbrido para Objetivo
+    ticker_obj = render_asset_selector("Activo Objetivo", "target", "BTC-USD")
         
     c1, c2 = st.columns(2)
     with c1:
@@ -51,38 +62,40 @@ with st.sidebar:
 
     st.divider()
     
-    st.header("2. Máquina del Tiempo (Backtest)")
+    st.header("2. Máquina del Tiempo")
     enable_backtest = st.checkbox("Activar Backtesting", value=False)
     
     fecha_corte = datetime.today()
     if enable_backtest:
         fecha_corte = st.date_input(
-            "Fecha de Corte (El algoritmo ignora el futuro):",
+            "Fecha de Corte:",
             value=datetime.today() - timedelta(days=60),
             max_value=datetime.today()
         )
+        st.info(f"Analizando como si fuera: {fecha_corte.strftime('%Y-%m-%d')}")
     
     st.divider()
     
     st.header("3. Librerías de Búsqueda")
-    l1_c1, l1_c2 = st.columns([2, 1])
-    with l1_c1:
-        lib1_ticker = st.selectbox("Librería 1", COMMON_TICKERS, index=4) 
-    with l1_c2:
-        lib1_tf = st.selectbox("TF L1", ["1d", "1wk"], index=0)
-        
-    l2_c1, l2_c2 = st.columns([2, 1])
-    with l2_c1:
-        lib2_ticker = st.selectbox("Librería 2", COMMON_TICKERS, index=13) 
-    with l2_c2:
-        lib2_tf = st.selectbox("TF L2", ["1d", "1wk"], index=0)
+    
+    # Librería 1
+    st.caption("Librería 1 (Principal)")
+    lib1_ticker = render_asset_selector("Lib 1", "lib1", "QQQ")
+    lib1_tf = st.selectbox("TF Lib 1", ["1d", "1wk"], index=0)
+    
+    st.write("") # Espacio
+    
+    # Librería 2
+    st.caption("Librería 2 (Secundaria)")
+    lib2_ticker = render_asset_selector("Lib 2", "lib2", "GLD")
+    lib2_tf = st.selectbox("TF Lib 2", ["1d", "1wk"], index=0)
 
     st.divider()
     
-    st.header("4. Parámetros Matemáticos")
-    ventana = st.slider("Memoria (Ventana)", 30, 365, 120)
+    st.header("4. Parámetros")
+    ventana = st.slider("Memoria (Velas)", 30, 365, 120)
     proyeccion = st.slider("Proyección (Futuro)", 5, 90, 30)
-    resultados = st.slider("Top Coincidencias", 1, 10, 3)
+    resultados = st.slider("Top Coincidencias", 1, 10, 5) # Aumentado default a 5 para ver colores
     
     run_btn = st.button("🚀 EJECUTAR ANÁLISIS", type="primary", use_container_width=True)
 
@@ -90,11 +103,10 @@ with st.sidebar:
 
 @st.cache_data(ttl=3600, show_spinner=False)
 def descargar_y_procesar(ticker, tf, col_target, fecha_limite_str=None):
-    # Reglas de límite de Yahoo
     tf_lower = tf.lower()
     if tf_lower == "1m": periodo = "7d"
     elif any(x in tf_lower for x in ["2m","5m","15m","30m","90m"]): periodo = "59d"
-    elif any(x in tf_lower for x in ["60m","1h"]): periodo = "730d"
+    elif any(x in tf_lower for x in ["60m","1h","4h"]): periodo = "730d"
     else: periodo = "max"
     
     try:
@@ -106,25 +118,16 @@ def descargar_y_procesar(ticker, tf, col_target, fecha_limite_str=None):
             data = data[col_target]
         
         data = data.dropna()
-        
-        if len(data) < 50:
-            return None, None, None, None, f"Pocos datos para {ticker} ({len(data)} velas)."
+        if len(data) < 50: return None, None, None, None, f"Pocos datos para {ticker}"
 
-        if data.index.tz is not None:
-            data.index = data.index.tz_localize(None)
+        if data.index.tz is not None: data.index = data.index.tz_localize(None)
             
-        # Lógica de Recorte
-        vals_futuro = []
-        fechas_futuro = []
+        vals_futuro, fechas_futuro = [], []
         
         if fecha_limite_str:
             fecha_dt = pd.to_datetime(fecha_limite_str)
-            
-            # Cortar Datos (Pasado)
             mask_pasado = data.index <= fecha_dt
             data_pasado = data[mask_pasado]
-            
-            # Guardar Futuro Real (Validación)
             mask_futuro = data.index > fecha_dt
             data_futuro = data[mask_futuro]
             
@@ -136,7 +139,6 @@ def descargar_y_procesar(ticker, tf, col_target, fecha_limite_str=None):
                 fechas_futuro = data_futuro.index
                 
             return vals_pasado, fechas_pasado, vals_futuro, fechas_futuro, None
-            
         else:
             return data.values.flatten(), data.index, [], [], None
 
@@ -154,7 +156,6 @@ def escanear_libreria(nombre_lib, precios_lib, fechas_lib, patron_target, n_proy
     len_patron = len(patron_target)
     patron_norm = normalizar(patron_target)
     hallazgos = []
-    
     tope = len(precios_lib) - len_patron - n_proyeccion
     if tope <= 0: return []
 
@@ -173,51 +174,38 @@ def escanear_libreria(nombre_lib, precios_lib, fechas_lib, patron_target, n_proy
         })
     return hallazgos
 
-# --- EJECUCIÓN PRINCIPAL ---
+# --- EJECUCIÓN ---
 
 if run_btn:
     status_text = st.empty()
     bar = st.progress(0)
     
     try:
-        # A. DESCARGA
         status_text.text("📡 Descargando datos...")
         fecha_str = fecha_corte.strftime('%Y-%m-%d') if enable_backtest else None
         
-        # Objetivo
+        # 1. Objetivo
         obj_p, obj_f, real_p, real_f, err = descargar_y_procesar(ticker_obj, tf_obj, columna_analisis, fecha_str)
-        if err:
-            st.error(f"Error Objetivo: {err}")
-            st.stop()
-            
-        if len(obj_p) < ventana:
-            st.error(f"Historial insuficiente en {ticker_obj}. Necesitas {ventana} velas antes de la fecha de corte.")
-            st.stop()
-            
+        if err: st.error(err); st.stop()
+        if len(obj_p) < ventana: st.error("Historial insuficiente."); st.stop()
         patron_actual = obj_p[-ventana:]
         bar.progress(20)
         
-        # Librerías
-        lib1_p, lib1_f, _, _, err1 = descargar_y_procesar(lib1_ticker, lib1_tf, columna_analisis, fecha_str)
-        lib2_p, lib2_f, _, _, err2 = descargar_y_procesar(lib2_ticker, lib2_tf, columna_analisis, fecha_str)
+        # 2. Librerías
+        lib1_p, lib1_f, _, _, _ = descargar_y_procesar(lib1_ticker, lib1_tf, columna_analisis, fecha_str)
+        lib2_p, lib2_f, _, _, _ = descargar_y_procesar(lib2_ticker, lib2_tf, columna_analisis, fecha_str)
         
-        if err1: st.warning(f"Librería 1: {err1}")
-        if err2: st.warning(f"Librería 2: {err2}")
-        
-        # B. CÁLCULO
+        # 3. Escaneo
         status_text.text("🧮 Analizando fractales...")
         matches = []
         if lib1_p is not None: matches += escanear_libreria(lib1_ticker, lib1_p, lib1_f, patron_actual, proyeccion)
         if lib2_p is not None: matches += escanear_libreria(lib2_ticker, lib2_p, lib2_f, patron_actual, proyeccion)
         
-        bar.progress(70)
-        
-        if not matches:
-            st.warning("No se encontraron patrones. Intenta reducir la ventana.")
-            st.stop()
+        if not matches: st.warning("No se encontraron patrones."); st.stop()
             
         matches.sort(key=lambda x: x['score'])
         
+        # 4. Filtrado
         seleccionados = []
         indices_usados = {} 
         distancia_min = int(ventana * 0.6)
@@ -229,9 +217,7 @@ if run_btn:
             
             repetido = False
             for usado in indices_usados[src]:
-                if abs(idx - usado) < distancia_min:
-                    repetido = True
-                    break
+                if abs(idx - usado) < distancia_min: repetido = True; break
             
             if not repetido:
                 seleccionados.append(m)
@@ -239,10 +225,10 @@ if run_btn:
             
             if len(seleccionados) >= resultados: break
             
-        bar.progress(90)
+        bar.progress(80)
         
-        # C. PROYECCIÓN
-        status_text.text("🎨 Dibujando gráfico...")
+        # 5. Construcción Visual
+        status_text.text("🎨 Generando gráfico...")
         
         suma_proyecciones = np.zeros(proyeccion)
         suma_pesos = 0
@@ -250,11 +236,9 @@ if run_btn:
         ultimo_valor_actual = patron_actual_norm[-1]
         
         series_graficar = []
-        
         for match in seleccionados:
             serie_comp = np.concatenate([match['datos_past'], match['datos_fut']])
             serie_norm = normalizar(serie_comp)
-            
             punto_empalme = serie_norm[-(proyeccion+1)]
             offset = ultimo_valor_actual - punto_empalme
             serie_alineada = serie_norm + offset
@@ -266,34 +250,50 @@ if run_btn:
             series_graficar.append({
                 'serie': serie_alineada,
                 'source': match['source'],
-                'label': f"{match['source']} | {match['fecha_origen'].strftime('%Y-%m-%d')} (Score: {match['score']:.2f})"
+                'fecha': match['fecha_origen'].strftime('%Y-%m-%d'),
+                'score': match['score'],
+                'label': f"{match['source']} ({match['fecha_origen'].strftime('%Y-%m-%d')}) Score: {match['score']:.2f}"
             })
             
         linea_maestra = suma_proyecciones / suma_pesos
         bar.progress(100)
         status_text.empty()
         
-        # --- D. PLOT ---
-        fig, ax = plt.subplots(figsize=(16, 8))
+        # --- PLOTEO ---
+        fig, ax = plt.subplots(figsize=(16, 9))
         
         x_pasado = np.arange(-ventana + 1, 1)
         x_futuro = np.arange(1, proyeccion + 1)
         x_total = np.concatenate([x_pasado, x_futuro])
         
-        # 1. Fantasmas
-        for s in series_graficar:
-            color = 'steelblue' if s['source'] == lib1_ticker else 'chocolate'
-            ax.plot(x_total, s['serie'], label=s['label'], color=color, alpha=0.4, linewidth=1.2)
+        # ----------------------------------------------------
+        # MEJORA VISUAL: COLORES ÚNICOS Y ETIQUETAS DE SCORE
+        # ----------------------------------------------------
+        
+        # Generar paleta de colores distintos (tab10 tiene 10 colores distintos)
+        colores = plt.cm.tab10(np.linspace(0, 1, len(series_graficar)))
+        
+        for i, s in enumerate(series_graficar):
+            color = colores[i]
             
-        # 2. Proyección Maestra
+            # Dibujar línea fantasma
+            ax.plot(x_total, s['serie'], label=s['label'], color=color, alpha=0.6, linewidth=1.2)
+            
+            # Dibujar Score al final de la línea (en el futuro)
+            # Coordenadas: última vela del futuro (x) y valor final de la serie (y)
+            ax.text(x_total[-1] + 1, s['serie'][-1], 
+                    f"S:{s['score']:.2f}", 
+                    color=color, fontsize=8, fontweight='bold', va='center')
+            
+        # Maestra
         y_master = np.insert(linea_maestra, 0, ultimo_valor_actual)
         x_master = np.insert(x_futuro, 0, 0)
-        ax.plot(x_master, y_master, label="PROYECCIÓN HÍBRIDA", color='#00ff00', linewidth=3.5, zorder=10)
+        ax.plot(x_master, y_master, label="PROYECCIÓN PONDERADA", color='#00ff00', linewidth=4.0, zorder=10)
         
-        # 3. Actual
+        # Actual
         ax.plot(x_pasado, patron_actual_norm, label=f"ACTUAL ({ticker_obj})", color='black', linewidth=2.5, zorder=11)
         
-        # 4. REALIDAD (BACKTEST) - CORREGIDO COLOR
+        # Realidad (Backtest)
         if enable_backtest and len(real_p) > 0:
             min_p = np.min(patron_actual)
             max_p = np.max(patron_actual)
@@ -303,28 +303,27 @@ if run_btn:
             limit_len = min(len(realidad_norm), proyeccion)
             y_real = realidad_norm[:limit_len]
             x_real = np.arange(1, limit_len + 1)
-            
             y_real_con = np.insert(y_real, 0, ultimo_valor_actual)
             x_real_con = np.insert(x_real, 0, 0)
             
-            # COLOR NEGRO PUNTEADO PARA QUE SE VEA SIEMPRE
             ax.plot(x_real_con, y_real_con, label="REALIDAD (VALIDACIÓN)", color='black', linewidth=2.5, linestyle='--', zorder=12)
 
-        # Configuración Ejes
-        ax.set_xlim(x_total[0], x_total[-1])
+        # EJES
+        ax.set_xlim(x_total[0], x_total[-1] + (proyeccion * 0.1)) # Margen derecho para etiquetas
         locator = ticker.MaxNLocator(nbins=25, integer=True)
         ax.xaxis.set_major_locator(locator)
         ax.minorticks_on()
         ax.grid(True, which='major', alpha=0.3)
-        ax.set_xlabel(f"Velas de {tf_obj} (Pasado <--- 0 ---> Futuro)", fontsize=10, color='gray')
+        ax.set_xlabel(f"Velas de {tf_obj}", fontsize=10, color='gray')
         
-        # Eje Superior
+        # Eje Superior Tiempo
         ax_top = ax.twiny()
         ax_top.set_xlim(ax.get_xlim())
         ax_top.xaxis.set_major_locator(locator)
         
         def obtener_delta(tf_str):
-            num = int(re.search(r'\d+', tf_str).group()) if re.search(r'\d+', tf_str) else 1
+            num_match = re.search(r'\d+', tf_str)
+            num = int(num_match.group()) if num_match else 1
             unit = tf_str.lower()
             if 'wk' in unit: return pd.Timedelta(weeks=num)
             if 'mo' in unit: return pd.Timedelta(days=30*num)
@@ -333,8 +332,7 @@ if run_btn:
             return pd.Timedelta(days=1)
 
         delta = obtener_delta(tf_obj)
-        # La fecha de referencia es la última del objeto cargado (sea hoy o fecha de corte)
-        ref_date = obj_f[-1] 
+        ref_date = obj_f[-1]
         es_intradia_plot = "m" in tf_obj or "h" in tf_obj
 
         def date_fmt(x, pos):
@@ -354,31 +352,29 @@ if run_btn:
         ax2.yaxis.set_major_formatter(ticker.StrMethodFormatter('${x:,.0f}'))
         ax2.set_ylabel(f"Precio {ticker_obj}", fontweight='bold')
         
-        # ETIQUETA DINÁMICA
         curr_price = patron_actual[-1]
         ax2.axhline(curr_price, color='#444444', ls='--', lw=1.5, alpha=0.8)
         
-        if enable_backtest:
-            # Etiqueta para Backtest
-            label_precio = f" Corte: {fecha_str} | Precio: ${curr_price:,.2f} "
-        else:
-            # Etiqueta Normal
-            label_precio = f" Precio Actual: ${curr_price:,.2f} "
-            
-        ax2.text(x_pasado[0], curr_price, label_precio, 
+        lbl_precio = f" Corte: {fecha_str} | ${curr_price:,.0f} " if enable_backtest else f" Actual: ${curr_price:,.0f} "
+        ax2.text(x_pasado[0], curr_price, lbl_precio, 
                  color='black', fontweight='bold', va='bottom', bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
         
-        label_v = "Fecha Corte" if enable_backtest else "Ahora"
-        plt.axvline(0, color='red', ls=':', label=label_v)
-        
-        titulo = f"Fractalidad Cruzada: {ticker_obj} ({tf_obj}) vs [{lib1_ticker} & {lib2_ticker}]"
+        # Layout
+        plt.axvline(0, color='red', ls=':', label="Ahora")
+        titulo = f"Fractalidad: {ticker_obj} ({tf_obj}) vs [{lib1_ticker} & {lib2_ticker}]"
         if enable_backtest: titulo += f" | BACKTEST: {fecha_str}"
-            
-        plt.title(titulo, pad=25, fontsize=14)
-        ax.legend(bbox_to_anchor=(1.08, 1), loc='upper left', fontsize=8)
+        plt.title(titulo, pad=35, fontsize=14)
+        
+        # Leyenda fuera
+        ax.legend(bbox_to_anchor=(1.08, 1), loc='upper left', fontsize=8, borderaxespad=0.)
         
         st.pyplot(fig)
-        st.success("Cálculo finalizado.")
+        
+        # Dataframe opcional
+        with st.expander("Ver Datos de Proyección"):
+            fechas_proy = [ref_date + (delta * i) for i in range(1, proyeccion + 1)]
+            precios_proy = (linea_maestra * rng) + min_p
+            st.dataframe(pd.DataFrame({"Fecha": fechas_proy, "Precio Estimado": precios_proy}))
 
     except Exception as e:
-        st.error(f"Error inesperado: {e}")
+        st.error(f"Error: {e}")
