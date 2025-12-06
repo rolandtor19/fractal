@@ -48,7 +48,7 @@ def render_asset_selector(label, key_prefix, default_val):
 # --- BARRA LATERAL ---
 with st.sidebar:
     st.header("1. Objetivo (Patrón Actual)")
-    ticker_obj = render_asset_selector("Activo", "target", "BTC-USD")
+    ticker_obj = render_asset_selector("Activo (Yahoo)", "target", "BTC-USD")
     
     c1, c2 = st.columns(2)
     with c1: tf_obj = st.selectbox("Timeframe", COMMON_TFS, index=4) 
@@ -370,6 +370,7 @@ if run_btn:
 
     except Exception as e:
         st.error(f"Ocurrió un error inesperado: {e}")
+
 
 
 
