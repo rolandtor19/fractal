@@ -18,7 +18,8 @@ st.set_page_config(
 
 st.title("🔮 Radar de Fractales & Backtester (Cross-Market)")
 st.markdown("""
-**Herramienta de Ingeniería Financiera:** Busca patrones matemáticos idénticos en el pasado para proyectar el futuro.
+**Herramienta de Ingeniería Financiera:** Busca patrones matemáticos idénticos en el pasado de diferentes mercados 
+para proyectar movimientos futuros.
 """)
 
 # --- LISTAS PREDEFINIDAS ---
@@ -32,16 +33,14 @@ COMMON_TICKERS = [
 
 COMMON_TFS = ["15m", "30m", "1h", "4h", "1d", "1wk", "1mo"]
 
-# --- HELPER PARA SELECCIÓN DE ACTIVOS ---
+# --- HELPER PARA SELECTORES ---
 def render_asset_selector(label, key_prefix, default_val):
-    """Crea un selector híbrido (Lista o Manual)"""
     col_mode, col_input = st.columns([1, 2])
     with col_mode:
         mode = st.radio("Modo", ["Lista", "Manual"], horizontal=True, key=f"{key_prefix}_mode", label_visibility="collapsed")
     
     with col_input:
         if mode == "Lista":
-            # Intentamos encontrar el default en la lista, si no, usamos el primero
             idx = COMMON_TICKERS.index(default_val) if default_val in COMMON_TICKERS else 0
             val = st.selectbox(label, COMMON_TICKERS, index=idx, key=f"{key_prefix}_list")
         else:
@@ -51,12 +50,11 @@ def render_asset_selector(label, key_prefix, default_val):
 # --- BARRA LATERAL ---
 with st.sidebar:
     st.header("1. Configuración del Objetivo")
-    # Selector Híbrido para Objetivo
     ticker_obj = render_asset_selector("Activo Objetivo", "target", "BTC-USD")
         
     c1, c2 = st.columns(2)
     with c1:
-        tf_obj = st.selectbox("Timeframe", COMMON_TFS, index=4) # Default 1d
+        tf_obj = st.selectbox("Timeframe", COMMON_TFS, index=4) 
     with c2:
         columna_analisis = st.selectbox("Precio:", ["Close", "Low", "High"], index=1) 
 
@@ -72,20 +70,17 @@ with st.sidebar:
             value=datetime.today() - timedelta(days=60),
             max_value=datetime.today()
         )
-        st.info(f"Analizando como si fuera: {fecha_corte.strftime('%Y-%m-%d')}")
+        st.info(f"Analizando hasta: {fecha_corte.strftime('%Y-%m-%d')}")
     
     st.divider()
     
     st.header("3. Librerías de Búsqueda")
     
-    # Librería 1
     st.caption("Librería 1 (Principal)")
     lib1_ticker = render_asset_selector("Lib 1", "lib1", "QQQ")
     lib1_tf = st.selectbox("TF Lib 1", ["1d", "1wk"], index=0)
     
-    st.write("") # Espacio
-    
-    # Librería 2
+    st.write("") 
     st.caption("Librería 2 (Secundaria)")
     lib2_ticker = render_asset_selector("Lib 2", "lib2", "GLD")
     lib2_tf = st.selectbox("TF Lib 2", ["1d", "1wk"], index=0)
@@ -95,7 +90,7 @@ with st.sidebar:
     st.header("4. Parámetros")
     ventana = st.slider("Memoria (Velas)", 30, 365, 120)
     proyeccion = st.slider("Proyección (Futuro)", 5, 90, 30)
-    resultados = st.slider("Top Coincidencias", 1, 10, 5) # Aumentado default a 5 para ver colores
+    resultados = st.slider("Top Coincidencias", 1, 10, 5)
     
     run_btn = st.button("🚀 EJECUTAR ANÁLISIS", type="primary", use_container_width=True)
 
@@ -174,7 +169,7 @@ def escanear_libreria(nombre_lib, precios_lib, fechas_lib, patron_target, n_proy
         })
     return hallazgos
 
-# --- EJECUCIÓN ---
+# --- EJECUCIÓN PRINCIPAL ---
 
 if run_btn:
     status_text = st.empty()
@@ -205,7 +200,7 @@ if run_btn:
             
         matches.sort(key=lambda x: x['score'])
         
-        # 4. Filtrado
+        # 4. Filtrado y Selección
         seleccionados = []
         indices_usados = {} 
         distancia_min = int(ventana * 0.6)
@@ -227,7 +222,7 @@ if run_btn:
             
         bar.progress(80)
         
-        # 5. Construcción Visual
+        # 5. Construcción Visual (CON RANKING #1, #2...)
         status_text.text("🎨 Generando gráfico...")
         
         suma_proyecciones = np.zeros(proyeccion)
@@ -236,7 +231,10 @@ if run_btn:
         ultimo_valor_actual = patron_actual_norm[-1]
         
         series_graficar = []
-        for match in seleccionados:
+        
+        # Loop con enumeración para asignar Rango (1, 2, 3...)
+        for i, match in enumerate(seleccionados):
+            rank = i + 1
             serie_comp = np.concatenate([match['datos_past'], match['datos_fut']])
             serie_norm = normalizar(serie_comp)
             punto_empalme = serie_norm[-(proyeccion+1)]
@@ -247,12 +245,15 @@ if run_btn:
             suma_proyecciones += serie_alineada[-proyeccion:] * peso
             suma_pesos += peso
             
+            # Etiqueta limpia para la leyenda
+            label_clean = f"#{rank} {match['source']} ({match['fecha_origen'].strftime('%Y-%m-%d')}) Score: {match['score']:.2f}"
+            
             series_graficar.append({
                 'serie': serie_alineada,
                 'source': match['source'],
-                'fecha': match['fecha_origen'].strftime('%Y-%m-%d'),
+                'rank': rank,
                 'score': match['score'],
-                'label': f"{match['source']} ({match['fecha_origen'].strftime('%Y-%m-%d')}) Score: {match['score']:.2f}"
+                'label': label_clean
             })
             
         linea_maestra = suma_proyecciones / suma_pesos
@@ -266,115 +267,7 @@ if run_btn:
         x_futuro = np.arange(1, proyeccion + 1)
         x_total = np.concatenate([x_pasado, x_futuro])
         
-        # ----------------------------------------------------
-        # MEJORA VISUAL: COLORES ÚNICOS Y ETIQUETAS DE SCORE
-        # ----------------------------------------------------
-        
-        # Generar paleta de colores distintos (tab10 tiene 10 colores distintos)
+        # Paleta de colores distintivos (tab10)
         colores = plt.cm.tab10(np.linspace(0, 1, len(series_graficar)))
         
-        for i, s in enumerate(series_graficar):
-            color = colores[i]
-            
-            # Dibujar línea fantasma
-            ax.plot(x_total, s['serie'], label=s['label'], color=color, alpha=0.6, linewidth=1.2)
-            
-            # Dibujar Score al final de la línea (en el futuro)
-            # Coordenadas: última vela del futuro (x) y valor final de la serie (y)
-            ax.text(x_total[-1] + 1, s['serie'][-1], 
-                    f"S:{s['score']:.2f}", 
-                    color=color, fontsize=8, fontweight='bold', va='center')
-            
-        # Maestra
-        y_master = np.insert(linea_maestra, 0, ultimo_valor_actual)
-        x_master = np.insert(x_futuro, 0, 0)
-        ax.plot(x_master, y_master, label="PROYECCIÓN PONDERADA", color='#00ff00', linewidth=4.0, zorder=10)
-        
-        # Actual
-        ax.plot(x_pasado, patron_actual_norm, label=f"ACTUAL ({ticker_obj})", color='black', linewidth=2.5, zorder=11)
-        
-        # Realidad (Backtest)
-        if enable_backtest and len(real_p) > 0:
-            min_p = np.min(patron_actual)
-            max_p = np.max(patron_actual)
-            rng = max_p - min_p
-            realidad_norm = (real_p - min_p) / rng
-            
-            limit_len = min(len(realidad_norm), proyeccion)
-            y_real = realidad_norm[:limit_len]
-            x_real = np.arange(1, limit_len + 1)
-            y_real_con = np.insert(y_real, 0, ultimo_valor_actual)
-            x_real_con = np.insert(x_real, 0, 0)
-            
-            ax.plot(x_real_con, y_real_con, label="REALIDAD (VALIDACIÓN)", color='black', linewidth=2.5, linestyle='--', zorder=12)
-
-        # EJES
-        ax.set_xlim(x_total[0], x_total[-1] + (proyeccion * 0.1)) # Margen derecho para etiquetas
-        locator = ticker.MaxNLocator(nbins=25, integer=True)
-        ax.xaxis.set_major_locator(locator)
-        ax.minorticks_on()
-        ax.grid(True, which='major', alpha=0.3)
-        ax.set_xlabel(f"Velas de {tf_obj}", fontsize=10, color='gray')
-        
-        # Eje Superior Tiempo
-        ax_top = ax.twiny()
-        ax_top.set_xlim(ax.get_xlim())
-        ax_top.xaxis.set_major_locator(locator)
-        
-        def obtener_delta(tf_str):
-            num_match = re.search(r'\d+', tf_str)
-            num = int(num_match.group()) if num_match else 1
-            unit = tf_str.lower()
-            if 'wk' in unit: return pd.Timedelta(weeks=num)
-            if 'mo' in unit: return pd.Timedelta(days=30*num)
-            if 'm' in unit and 'o' not in unit: return pd.Timedelta(minutes=num)
-            if 'h' in unit: return pd.Timedelta(hours=num)
-            return pd.Timedelta(days=1)
-
-        delta = obtener_delta(tf_obj)
-        ref_date = obj_f[-1]
-        es_intradia_plot = "m" in tf_obj or "h" in tf_obj
-
-        def date_fmt(x, pos):
-            dt = ref_date + (delta * x)
-            if es_intradia_plot: return dt.strftime("%d-%b %Hh")
-            else: return dt.strftime("%d-%b")
-
-        ax_top.xaxis.set_major_formatter(ticker.FuncFormatter(date_fmt))
-        ax_top.tick_params(axis='x', rotation=45, labelsize=8)
-        
-        # Eje Precio
-        ax2 = ax.twinx()
-        min_p, max_p = np.min(patron_actual), np.max(patron_actual)
-        rng = max_p - min_p
-        y1, y2 = ax.get_ylim()
-        ax2.set_ylim(y1 * rng + min_p, y2 * rng + min_p)
-        ax2.yaxis.set_major_formatter(ticker.StrMethodFormatter('${x:,.0f}'))
-        ax2.set_ylabel(f"Precio {ticker_obj}", fontweight='bold')
-        
-        curr_price = patron_actual[-1]
-        ax2.axhline(curr_price, color='#444444', ls='--', lw=1.5, alpha=0.8)
-        
-        lbl_precio = f" Corte: {fecha_str} | ${curr_price:,.0f} " if enable_backtest else f" Actual: ${curr_price:,.0f} "
-        ax2.text(x_pasado[0], curr_price, lbl_precio, 
-                 color='black', fontweight='bold', va='bottom', bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
-        
-        # Layout
-        plt.axvline(0, color='red', ls=':', label="Ahora")
-        titulo = f"Fractalidad: {ticker_obj} ({tf_obj}) vs [{lib1_ticker} & {lib2_ticker}]"
-        if enable_backtest: titulo += f" | BACKTEST: {fecha_str}"
-        plt.title(titulo, pad=35, fontsize=14)
-        
-        # Leyenda fuera
-        ax.legend(bbox_to_anchor=(1.08, 1), loc='upper left', fontsize=8, borderaxespad=0.)
-        
-        st.pyplot(fig)
-        
-        # Dataframe opcional
-        with st.expander("Ver Datos de Proyección"):
-            fechas_proy = [ref_date + (delta * i) for i in range(1, proyeccion + 1)]
-            precios_proy = (linea_maestra * rng) + min_p
-            st.dataframe(pd.DataFrame({"Fecha": fechas_proy, "Precio Estimado": precios_proy}))
-
-    except Exception as e:
-        st.error(f"Error: {e}")
+        # 1. Fantasmas (Con
