@@ -270,4 +270,106 @@ if run_btn:
         # Paleta de colores distintivos (tab10)
         colores = plt.cm.tab10(np.linspace(0, 1, len(series_graficar)))
         
-        # 1. Fantasmas (Con
+        # 1. Fantasmas (Con etiquetas numéricas cortas)
+        for i, s in enumerate(series_graficar):
+            color = colores[i]
+            # Línea
+            ax.plot(x_total, s['serie'], label=s['label'], color=color, alpha=0.6, linewidth=1.5)
+            
+            # Etiqueta numérica al final de la línea (#1, #2...)
+            # Ponemos un pequeño offset en X para que no pegue con la línea
+            ax.text(x_total[-1] + (proyeccion * 0.02), s['serie'][-1], 
+                    f"#{s['rank']}", 
+                    color=color, fontsize=10, fontweight='bold', va='center')
+            
+        # 2. Maestra
+        y_master = np.insert(linea_maestra, 0, ultimo_valor_actual)
+        x_master = np.insert(x_futuro, 0, 0)
+        ax.plot(x_master, y_master, label="PROYECCIÓN HÍBRIDA", color='#00ff00', linewidth=4.0, zorder=10)
+        
+        # 3. Actual
+        ax.plot(x_pasado, patron_actual_norm, label=f"ACTUAL ({ticker_obj})", color='black', linewidth=2.5, zorder=11)
+        
+        # 4. Realidad (Backtest)
+        if enable_backtest and len(real_p) > 0:
+            min_p = np.min(patron_actual)
+            max_p = np.max(patron_actual)
+            rng = max_p - min_p
+            realidad_norm = (real_p - min_p) / rng
+            
+            limit_len = min(len(realidad_norm), proyeccion)
+            y_real = realidad_norm[:limit_len]
+            x_real = np.arange(1, limit_len + 1)
+            y_real_con = np.insert(y_real, 0, ultimo_valor_actual)
+            x_real_con = np.insert(x_real, 0, 0)
+            
+            ax.plot(x_real_con, y_real_con, label="REALIDAD (VALIDACIÓN)", color='black', linewidth=2.5, linestyle='--', zorder=12)
+
+        # Ejes
+        ax.set_xlim(x_total[0], x_total[-1] + (proyeccion * 0.15)) # Espacio extra derecha para etiquetas #1, #2
+        locator = ticker.MaxNLocator(nbins=25, integer=True)
+        ax.xaxis.set_major_locator(locator)
+        ax.minorticks_on()
+        ax.grid(True, which='major', alpha=0.3)
+        ax.set_xlabel(f"Velas de {tf_obj}", fontsize=10, color='gray')
+        
+        # Eje Superior
+        ax_top = ax.twiny()
+        ax_top.set_xlim(ax.get_xlim())
+        ax_top.xaxis.set_major_locator(locator)
+        
+        def obtener_delta(tf_str):
+            num = int(re.search(r'\d+', tf_str).group()) if re.search(r'\d+', tf_str) else 1
+            unit = tf_str.lower()
+            if 'wk' in unit: return pd.Timedelta(weeks=num)
+            if 'mo' in unit: return pd.Timedelta(days=30*num)
+            if 'm' in unit and 'o' not in unit: return pd.Timedelta(minutes=num)
+            if 'h' in unit: return pd.Timedelta(hours=num)
+            return pd.Timedelta(days=1)
+
+        delta = obtener_delta(tf_obj)
+        ref_date = obj_f[-1]
+        es_intradia_plot = "m" in tf_obj or "h" in tf_obj
+
+        def date_fmt(x, pos):
+            dt = ref_date + (delta * x)
+            if es_intradia_plot: return dt.strftime("%d-%b %Hh")
+            else: return dt.strftime("%d-%b")
+
+        ax_top.xaxis.set_major_formatter(ticker.FuncFormatter(date_fmt))
+        ax_top.tick_params(axis='x', rotation=45, labelsize=8)
+        
+        # Eje Precio
+        ax2 = ax.twinx()
+        min_p, max_p = np.min(patron_actual), np.max(patron_actual)
+        rng = max_p - min_p
+        y1, y2 = ax.get_ylim()
+        ax2.set_ylim(y1 * rng + min_p, y2 * rng + min_p)
+        ax2.yaxis.set_major_formatter(ticker.StrMethodFormatter('${x:,.0f}'))
+        ax2.set_ylabel(f"Precio {ticker_obj}", fontweight='bold')
+        
+        curr_price = patron_actual[-1]
+        ax2.axhline(curr_price, color='#444444', ls='--', lw=1.5, alpha=0.8)
+        
+        lbl_precio = f" Corte: {fecha_str} | ${curr_price:,.0f} " if enable_backtest else f" Actual: ${curr_price:,.0f} "
+        ax2.text(x_pasado[0], curr_price, lbl_precio, 
+                 color='black', fontweight='bold', va='bottom', bbox=dict(facecolor='white', alpha=0.7, edgecolor='none'))
+        
+        label_v = "Fecha Corte" if enable_backtest else "Ahora"
+        plt.axvline(0, color='red', ls=':', label=label_v)
+        
+        titulo = f"Fractalidad: {ticker_obj} ({tf_obj}) vs [{lib1_ticker} & {lib2_ticker}]"
+        if enable_backtest: titulo += f" | BACKTEST: {fecha_str}"
+        plt.title(titulo, pad=35, fontsize=14)
+        
+        ax.legend(bbox_to_anchor=(1.08, 1), loc='upper left', fontsize=9, borderaxespad=0.)
+        
+        st.pyplot(fig)
+        
+        with st.expander("Ver Datos Numéricos"):
+            fechas_proy = [ref_date + (delta * i) for i in range(1, proyeccion + 1)]
+            precios_proy = (linea_maestra * rng) + min_p
+            st.dataframe(pd.DataFrame({"Fecha": fechas_proy, "Precio Estimado": precios_proy}))
+
+    except Exception as e:
+        st.error(f"Error: {e}")
