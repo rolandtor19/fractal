@@ -52,7 +52,7 @@ with st.sidebar:
     
     c1, c2 = st.columns(2)
     with c1: tf_obj = st.selectbox("Timeframe", COMMON_TFS, index=4) 
-    with c2: columna_analisis = st.selectbox("Precio:", ["Close", "Low", "High"], index=1) 
+    with c2: columna_analisis = st.selectbox("Precio:", ["Open","Close", "Low", "High"], index=1) 
 
     st.divider()
     
@@ -370,4 +370,5 @@ if run_btn:
 
     except Exception as e:
         st.error(f"Ocurrió un error inesperado: {e}")
+
 
