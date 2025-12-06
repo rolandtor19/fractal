@@ -66,12 +66,19 @@ with st.sidebar:
         default=["QQQ", "GLD", "SPY", "NVDA"] # Default potente
     )
     
-    # Opción para agregar uno manual extra a la búsqueda
-    use_manual_lib = st.checkbox("Agregar activo manual extra")
-    manual_lib = ""
-    if use_manual_lib:
-        manual_lib = st.text_input("Ticker Manual (Ej: ^IXIC)", value="")
-        if manual_lib: libs_seleccionadas.append(manual_lib)
+    # Opción para agregar multiple manuales extra a la búsqueda
+with st.expander("➕ Agregar activos manuales extra"):
+        manual_input = st.text_area(
+            "Escribe los tickers separados por coma (,):",
+            placeholder="Ej: AMD, INTC, ^IXIC, XAUUSD=X"
+        )
+        
+        if manual_input:
+            extras = [x.strip().upper() for x in manual_input.split(',') if x.strip()]
+            for extra in extras:
+                if extra not in libs_seleccionadas:
+                    libs_seleccionadas.append(extra)
+            st.caption(f"✅ Se añadirán: {', '.join(extras)}")
 
     tf_libs = st.selectbox("Timeframe de Búsqueda", ["1d", "1wk"], index=0)
 
@@ -370,6 +377,7 @@ if run_btn:
 
     except Exception as e:
         st.error(f"Ocurrió un error inesperado: {e}")
+
 
 
 
